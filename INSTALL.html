@@ -1,0 +1,356 @@
+<!doctype html><html><head><meta charset='utf-8'><title>INSTALL</title><style>body{font-family:Segoe UI,Arial,sans-serif;max-width:900px;margin:32px auto;padding:0 24px;line-height:1.5;color:#222}
+h1{border-bottom:3px solid #c00;padding-bottom:6px} h2{margin-top:2em;border-bottom:1px solid #ccc;padding-bottom:4px;page-break-after:avoid}
+code{background:#f3f3f3;padding:1px 5px;border-radius:3px;font-family:Consolas,monospace;font-size:0.95em}
+pre{background:#1e1e1e;color:#eee;padding:12px 14px;border-radius:6px;overflow-x:auto;page-break-inside:avoid} pre code{background:none;color:inherit;padding:0}
+table{border-collapse:collapse;width:100%;margin:12px 0;page-break-inside:avoid} th,td{border:1px solid #bbb;padding:6px 9px;text-align:left;vertical-align:top} th{background:#eee}
+blockquote{border-left:4px solid #c00;margin:0;padding:4px 14px;background:#fff6f6}
+strong{color:#000} @media print{body{margin:0;max-width:none;font-size:11pt} pre{white-space:pre-wrap}}</style></head><body><h1 id="blackarch-linux-on-a-dell-laptop-driven-over-ssh-step-by-step">BlackArch Linux on a Dell laptop, driven over SSH - step by step</h1>
+<p>Source: blackarch.org/downloads.html, blackarch.org/blackarch-install.html and the official PDF
+guide (blackarch-guide-en.pdf from blackarch.org/guide.html, section 2.1.5). Dell-specific notes are marked <strong>Dell</strong>.</p>
+<h2 id="0-which-iso-and-why-read-this-once">0. Which ISO and why (read this once)</h2>
+<table>
+<thead>
+<tr>
+<th>ISO</th>
+<th>Size</th>
+<th>Date</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full</td>
+<td>22 GB</td>
+<td>2023-04-01</td>
+<td>BlackArch's own page: "highly discouraged ... many errors and conflicts". Frozen 2023 packages.</td>
+</tr>
+<tr>
+<td>Slim</td>
+<td>5.5 GB</td>
+<td>2023-05-01</td>
+<td>GUI installer, a curated subset of tools.</td>
+</tr>
+<tr>
+<td><strong>Netinstall</strong></td>
+<td>815 MB</td>
+<td>2023-04-01</td>
+<td><strong>Official recommendation.</strong> Bootstrapper only; everything is pulled fresh from the repos.</td>
+</tr>
+</tbody>
+</table>
+<p>"Most complete" = netinstall + <code>pacman -S blackarch</code> after first boot. That installs <strong>every</strong> tool
+currently in the repo (2800+, newer than anything on the full ISO) with no 2023-vs-2026 conflicts.</p>
+<h2 id="1-write-the-stick-windows-pc">1. Write the stick (Windows PC)</h2>
+<pre><code class="language-powershell">cd C:\Projects\BlackArch
+.\Write-IsoToUsb.ps1 -IsoPath &quot;$env:USERPROFILE\Downloads\blackarch-linux-netinst-2023.04.01-x86_64.iso&quot; -DiskNumber 2 -ExpectedSha1 df2dfcfafa1a8f9bab8afd9aa6b788de00e03e09
+</code></pre>
+<p>It elevates itself, checks the SHA1, shows the target disk, asks you to type <code>2</code>, wipes the stick
+and dd's the ISO. When Windows says "format this disk?" click <strong>Cancel</strong>. Eject.</p>
+<blockquote>
+<p>Check the disk number first with <code>Get-Disk</code> - the 128 GB stick was disk 2 in our case.</p>
+</blockquote>
+<h2 id="2-dell-bios-f2-at-the-dell-logo">2. Dell BIOS (F2 at the Dell logo)</h2>
+<ul>
+<li><strong>Secure Boot: OFF</strong> (the BlackArch ISO is not signed).</li>
+<li>SATA/NVMe operation: <strong>AHCI/NVMe</strong>, not RAID/RST (Linux won't see the SSD under RST).</li>
+<li>Boot the stick: power on, tap <strong>F12</strong>, pick the <strong>UEFI</strong> entry for the USB stick.</li>
+<li>At the ISO menu choose <strong>BlackArch Linux (x86_64)</strong>.</li>
+</ul>
+<h2 id="3-network-do-this-before-starting-the-installer">3. Network - do this BEFORE starting the installer</h2>
+<p><strong>Dell:</strong> the laptop has no Ethernet port and the installer script does not do Wi-Fi.
+Easiest: plug a USB-C Ethernet adapter / dock. Otherwise connect Wi-Fi by hand, then choose
+<strong>Skip</strong> at the installer's network step:</p>
+<pre><code class="language-bash">ip a                              # find the wifi interface name (wlan0 / wlp0s20f3)
+iwctl                             # if present
+  station wlan0 scan
+  station wlan0 get-networks
+  station wlan0 connect &quot;YourSSID&quot;   # asks for the password
+  exit
+# if iwctl is missing, try:  wifi-menu
+ping -c 2 archlinux.org
+</code></pre>
+<p>Log in as <code>root</code>, password <code>blackarch</code> (live ISO defaults).</p>
+<h2 id="4-fix-the-2023-keyrings-prevents-signature-is-unknown-trust-failures">4. Fix the 2023 keyrings (prevents "signature is unknown trust" failures)</h2>
+<p>The ISO is from 2023; refresh the keys before installing anything:</p>
+<pre><code class="language-bash">pacman -Sy archlinux-keyring blackarch-keyring
+pacman-key --init
+pacman-key --populate archlinux blackarch
+</code></pre>
+<h2 id="5-run-the-installer">5. Run the installer</h2>
+<p>Run it over SSH from the Windows PC (tmux/screen from today's repos will not run on the 2023 live
+system, so keep the dock cable plugged in; if the SSH tab dies, reconnect and start the installer again).</p>
+<pre><code class="language-bash">pacman -Sy blackarch-installer     # get the current installer (1.2.25 on 2026-10-06)
+ssh -t root@&lt;live-iso-ip&gt; blackarch-install
+</code></pre>
+<p>Answers for installer 1.2.25 (prompts appear in this order):</p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Choose an installation mode</td>
+<td><strong>1</strong> - Install from repository using pacman</td>
+</tr>
+<tr>
+<td>Output mode (verbose/quiet)</td>
+<td><strong>1</strong> verbose, so errors are visible</td>
+</tr>
+<tr>
+<td>Set locale</td>
+<td>Enter (<code>en_US.UTF-8</code>)</td>
+</tr>
+<tr>
+<td>Keymap</td>
+<td>Enter (<code>us</code>)</td>
+</tr>
+<tr>
+<td>Set your hostname</td>
+<td>e.g. <code>blackarch-laptop</code></td>
+</tr>
+<tr>
+<td>Network interface</td>
+<td><code>eth0</code> (the dock)</td>
+</tr>
+<tr>
+<td>Network mode</td>
+<td><strong>1</strong> Auto DHCP</td>
+</tr>
+<tr>
+<td>Install with Windows/Other OS (dualboot)</td>
+<td><strong>n</strong></td>
+</tr>
+<tr>
+<td>Full encrypted root (LUKS)</td>
+<td>your call. <code>y</code> = passphrase at every boot, data safe if laptop is lost.</td>
+</tr>
+<tr>
+<td>Please choose a device</td>
+<td><code>nvme0n1</code> (the 1 TB NVMe). <strong>This erases the SSD.</strong> Never <code>sda</code>, that is the USB stick.</td>
+</tr>
+<tr>
+<td>Create partitions with cfdisk</td>
+<td><code>y</code></td>
+</tr>
+<tr>
+<td>Start with an in-memory zeroed partition table</td>
+<td><code>y</code> (wipes the old Omarchy layout)</td>
+</tr>
+<tr>
+<td>cfdisk: label type</td>
+<td><strong>gpt</strong></td>
+</tr>
+<tr>
+<td>cfdisk: partition 1</td>
+<td>New -&gt; <code>1G</code> -&gt; Type -&gt; <strong>EFI System</strong></td>
+</tr>
+<tr>
+<td>cfdisk: partition 2</td>
+<td>New -&gt; <code>32G</code> -&gt; Type -&gt; <strong>Linux swap</strong> (matches RAM, allows hibernate)</td>
+</tr>
+<tr>
+<td>cfdisk: partition 3</td>
+<td>New -&gt; Enter (rest of disk) -&gt; leave as Linux filesystem; <strong>Write</strong> -&gt; <code>yes</code> -&gt; <strong>Quit</strong></td>
+</tr>
+<tr>
+<td>EFI System partition</td>
+<td><code>1</code> (the installer expands it to <code>/dev/nvme0n1p1</code>; fat32 is automatic)</td>
+</tr>
+<tr>
+<td>Root partition / filesystem</td>
+<td><code>3</code> / Enter (ext4)</td>
+</tr>
+<tr>
+<td>Swap partition</td>
+<td><code>2</code></td>
+</tr>
+<tr>
+<td>Partition table correct</td>
+<td><code>y</code></td>
+</tr>
+<tr>
+<td>Timezone (Zone/SubZone)</td>
+<td><code>America/New_York</code> (adjust)</td>
+</tr>
+<tr>
+<td>root password, user name + password</td>
+<td>set both; don't run as root day to day</td>
+</tr>
+<tr>
+<td>Select a mirror number</td>
+<td>Enter for default</td>
+</tr>
+<tr>
+<td>Setup X11 + window managers</td>
+<td><strong>y</strong> (installs LXDM login screen + window managers)</td>
+</tr>
+<tr>
+<td>Choose window managers [6]</td>
+<td>Enter = all five (Awesome, Fluxbox, i3, Openbox, Spectrwm). Pick Openbox at login for a normal mouse-driven desktop.</td>
+</tr>
+<tr>
+<td>VirtualBox / VMware guest tools</td>
+<td><strong>n</strong> (real hardware)</td>
+</tr>
+<tr>
+<td>Setup BlackArch Linux tools</td>
+<td><strong>n</strong> - do it after first boot (step 7) over SSH where errors can be handled</td>
+</tr>
+</tbody>
+</table>
+<p>Reboot, remove the stick.</p>
+<h2 id="5b-unattended-run-what-we-actually-did-on-2026-10-06">5b. Unattended run (what we actually did on 2026-10-06)</h2>
+<p><code>Tools\drive-install.sh</code> runs the installer inside a pty on the live ISO and types every answer
+(partitions were made first with <code>sfdisk</code>: 1G EFI / 32G swap / rest root, LUKS on root). Launch from
+Windows:</p>
+<pre><code class="language-bash">scp C:\Projects\BlackArch\Tools\drive-install.sh root@&lt;live-iso-ip&gt;:/root/
+ssh root@&lt;live-iso-ip&gt; &quot;sed -i 's/\r$//' /root/drive-install.sh; chmod +x /root/drive-install.sh; setsid nohup /root/drive-install.sh blackarch-laptop pentester America/New_York nvme0n1 &gt; /root/driver.out 2&gt;&amp;1 &lt; /dev/null &amp;&quot;
+</code></pre>
+<p>Progress: <code>ssh root@&lt;live-iso-ip&gt; cat /root/driver.log</code>. Full installer output: <code>/root/install.log</code>.
+It sets <strong>temporary</strong> secrets, all <code>blackarch</code>: LUKS passphrase, root password, user password.</p>
+<h2 id="6-first-boot-change-the-three-temporary-secrets-first">6. First boot - change the three temporary secrets FIRST</h2>
+<p>At the boot prompt "Enter passphrase" type <code>blackarch</code>. Log in as <code>pentester</code> / <code>blackarch</code>, then:</p>
+<pre><code class="language-bash">passwd                                        # your user password
+sudo passwd root                              # root password
+sudo cryptsetup luksChangeKey /dev/nvme0n1p3  # disk passphrase: asks old (blackarch), then new twice
+</code></pre>
+<p>Verify the new disk passphrase before you forget the old one: <code>sudo cryptsetup open --test-passphrase /dev/nvme0n1p3</code>.</p>
+<p>The installed system came up at <strong><laptop-ip></strong> (the live ISO had .172). The Windows PC's SSH key was
+pre-installed for root and pentester, so from Windows: <code>ssh pentester@&lt;laptop-ip&gt;</code>.</p>
+<p>Then:</p>
+<pre><code class="language-bash">sudo pacman -Syyu            # full system update
+</code></pre>
+<p><strong>Dell:</strong> if Wi-Fi is missing after install: <code>sudo pacman -S iwd</code> then <code>sudo systemctl enable --now iwd</code>
+(or <code>networkmanager</code> + <code>nmtui</code>). Firmware for the Intel AX211 card is in <code>linux-firmware</code>, already pulled in.</p>
+<h2 id="7-install-everything">7. Install EVERYTHING</h2>
+<pre><code class="language-bash">sudo pacman -S blackarch     # all 2800+ tools; press Enter to accept defaults. Needs ~40-60 GB.
+</code></pre>
+<p>Takes a while. If it stops with "failed to commit transaction / conflicting files", the official fix is:</p>
+<pre><code class="language-bash">sudo pacman -Syyu --needed --overwrite='*' blackarch
+</code></pre>
+<p>Or install by category instead: <code>pacman -Sg | grep blackarch</code> then <code>sudo pacman -S blackarch-&lt;category&gt;</code>.</p>
+<p>Done 2026-10-06 16:56-18:29 MDT: 2,855 tools / 6,028 packages, 25 GB download, 130 GB on disk.
+29 tools had non-fatal post-install hook failures (old Ruby gems / pinned Python deps); the packages
+are installed, those tools may need their own setup the first time. The list is in the pacman log (<code>grep "command failed" /var/log/pacman.log</code>).</p>
+<h2 id="7b-daily-driver-desktop-drivers-firmware-performance-what-we-ran">7b. Daily-driver desktop, drivers, firmware, performance (what we ran)</h2>
+<p><code>Tools\post-tools-desktop.sh</code> (run as root after the tools): GNOME + GDM login screen, Ubuntu-style
+dock (<code>gnome-shell-extension-dash-to-dock</code> from the AUR via paru), tray icons, Firefox, NetworkManager,
+PipeWire audio, Bluetooth, <code>nvidia-open</code> + <code>nvidia-utils</code> + <code>nvidia-prime</code> (RTX laptop GPU), Intel media
+driver, fwupd, power-profiles-daemon set to <strong>performance</strong>, weekly <code>fstrim.timer</code>.</p>
+<p>Lessons:
+- The Arch package is <strong><code>nvidia-open</code></strong> now (not <code>nvidia</code>) for RTX cards. A wrong name aborts the whole pacman batch.
+- Always <code>sudo pacman -Syu</code> <strong>before</strong> installing anything. The repo kernel moved 7.2.8 -&gt; 7.2.9 during our
+  session, so the NVIDIA module was built for a kernel that was not running yet. Full upgrade + reboot fixed it.
+- Run the GPU on demand: <code>prime-run &lt;program&gt;</code> sends that program to the NVIDIA card; the Intel GPU drives
+  the desktop. <code>hashcat -I</code> lists both once <code>opencl-nvidia</code> is installed.
+- After switching to NetworkManager the laptop got a new DHCP address (<laptop-ip>). Use <code>ssh pentester@blackarch-laptop</code>
+  or check <code>ip -br a</code> on the laptop.</p>
+<h2 id="7c-choosing-a-desktop-several-are-installed-pick-at-the-login-screen">7c. Choosing a desktop (several are installed, pick at the login screen)</h2>
+<p>Installed on blackarch-laptop: <strong>GNOME</strong> (Wayland only), <strong>KDE Plasma</strong> (Wayland + X11), <strong>Cinnamon</strong> (X11 and
+Wayland), <strong>Xfce</strong>, plus the five bare window managers from the installer (awesome, fluxbox, i3,
+openbox, spectrwm - keyboard-driven, skip them). To switch: log out, click your name at the GDM login
+screen, then the <strong>gear icon bottom-right</strong>, pick a session, enter the password. GDM remembers the last
+choice per user.</p>
+<table>
+<thead>
+<tr>
+<th>Desktop</th>
+<th>Feel</th>
+<th>BlackArch tool menu (categories)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KDE Plasma</td>
+<td>Windows-like taskbar + start menu, most configurable, good on NVIDIA</td>
+<td>yes (start menu)</td>
+</tr>
+<tr>
+<td>Cinnamon</td>
+<td>Linux Mint; simplest, bottom panel + menu</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>GNOME</td>
+<td>Ubuntu-like dock + Activities overview</td>
+<td>no (flat app grid; add the ArcMenu extension for categories)</td>
+</tr>
+<tr>
+<td>Xfce</td>
+<td>lightweight, traditional</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<p>"X11" vs "Wayland" entries: same desktop, different display system. Wayland is newer and smoother;
+X11 is the one almost every pentest GUI tool was written for (screen capture, Java apps, Burp,
+Wireshark). On this laptop prefer the <strong>X11</strong> entry when a tool misbehaves. The Xfce Wayland entry
+needs <code>labwc</code>, which is not installed, so it just bounces back to the login screen.</p>
+<p>Install/remove desktops with pacman, e.g. <code>sudo pacman -Rns xfce4 xfce4-goodies</code> once you have settled.</p>
+<h2 id="8-if-the-installer-dies-at-the-ping-check">8. If the installer dies at the ping check</h2>
+<p>The script aborts when <code>ping github.com</code> fails (firewalls that drop ICMP). Official workaround:
+edit <code>/usr/bin/blackarch-install</code>, find the block starting <code>if ! ping -c 1 github.com</code> (around line 545)
+and delete through its <code>fi</code>, then rerun <code>blackarch-install</code>.</p>
+<h2 id="plan-b-plain-arch-first-blackarch-on-top">Plan B - plain Arch first, BlackArch on top</h2>
+<p>If <code>blackarch-install</code> won't cooperate on this laptop, install vanilla Arch (archinstall or Omarchy)
+and then, as root:</p>
+<pre><code class="language-bash">curl -O https://blackarch.org/strap.sh
+echo d338a4bb95d9e09f97508da68ac9e17d963b85f6 strap.sh | sha1sum -c
+chmod +x strap.sh &amp;&amp; sudo ./strap.sh
+sudo pacman -Syu &amp;&amp; sudo pacman -S blackarch
+</code></pre>
+<p>Result is the same repo and the same tools - that is literally what the netinstall path does.</p>
+<h2 id="9-dell-laptop-hardware-notes-linux-has-no-driver-pack-step">9. Dell laptop hardware notes (Linux has no "driver pack" step)</h2>
+<p>Linux drivers live inside the kernel and the <code>linux-firmware</code> package. Both are installed by the
+installer automatically, so there is nothing to slipstream onto the stick (the stick is a read-only
+dd image anyway). The only things to add are done AFTER install, with pacman:</p>
+<table>
+<thead>
+<tr>
+<th>Hardware</th>
+<th>Status</th>
+<th>After install</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Thunderbolt dock Ethernet (Realtek)</td>
+<td>in-kernel <code>r8152</code> / <code>r8169</code> - works in the live ISO, pick <strong>Auto DHCP</strong></td>
+<td>nothing</td>
+</tr>
+<tr>
+<td>Intel AX211 Wi-Fi / Bluetooth</td>
+<td>in-kernel <code>iwlwifi</code> + firmware</td>
+<td><code>sudo pacman -S networkmanager &amp;&amp; sudo systemctl enable --now NetworkManager</code> then <code>nmtui</code></td>
+</tr>
+<tr>
+<td>Intel Iris Xe iGPU</td>
+<td>in-kernel <code>i915</code></td>
+<td><code>sudo pacman -S mesa intel-media-driver</code></td>
+</tr>
+<tr>
+<td>NVIDIA RTX laptop GPU (this laptop)</td>
+<td>boots on <code>nouveau</code>; proper driver is <code>nvidia-open</code></td>
+<td><code>sudo pacman -Syu nvidia-open nvidia-utils nvidia-prime opencl-nvidia</code> then reboot; verify with <code>nvidia-smi</code></td>
+</tr>
+<tr>
+<td>Touchpad, audio, webcam, USB-C</td>
+<td>in-kernel</td>
+<td>nothing (audio: <code>sudo pacman -S pipewire pipewire-pulse wireplumber</code>)</td>
+</tr>
+<tr>
+<td>Fingerprint reader (Goodix)</td>
+<td>not supported on Linux</td>
+<td>skip</td>
+</tr>
+</tbody>
+</table>
+<p>Dock tips: in BIOS keep <strong>Thunderbolt &gt; Enable Thunderbolt Boot Support</strong> ON and security level
+"No security" or "User Authorization"; plug the dock in before powering on so the live ISO sees it.
+Check with <code>ip a</code> - the dock NIC shows as <code>enp...</code> or <code>eth0</code>; <code>ping -c 2 archlinux.org</code> must answer.</p>
+<h2 id="10-talking-to-claude-while-installing">10. Talking to Claude while installing</h2>
+<p>Keep this Claude Code session open on the Windows PC. Photograph the Dell screen with your phone and
+paste the photo into the chat; that is enough to read error messages. Or type the exact prompt text.</p></body></html>
